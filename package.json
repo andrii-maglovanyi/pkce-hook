@@ -1,6 +1,6 @@
 {
   "name": "pkce-hook",
-  "version": "0.0.1-alpha.2",
+  "version": "0.0.1-alpha.3",
   "description": "Zero dependency authorization Code Flow with PKCE",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -162,10 +162,11 @@ export const useAuthService = () => {
     if (auth || authHandshake?.isPending) return;
 
     const getAccessToken = async () => {
-      const { code } = Url.parseQueryString();
+      const { code, state } = Url.parseQueryString();
 
       if (code) {
-        if (!authHandshake) {
+        if (!authHandshake || authHandshake.state !== state) {
+          Storage.remove("auth-handshake");
           Url.removeQueryString();
           return;
         }
