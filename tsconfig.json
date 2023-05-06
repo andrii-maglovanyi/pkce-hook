@@ -1,14 +1,14 @@
 {
   "compilerOptions": {
-    "declaration": true,
-    "declarationDir": "dist",
+    "sourceMap": true,
+    "strict": true,
     "esModuleInterop": true,
     "jsx": "react-jsx",
-    "lib": ["es6", "dom"],
+    "lib": ["esnext", "dom"],
     "module": "esnext",
     "moduleResolution": "node",
     "outDir": "dist",
-    "target": "es6"
+    "target": "esnext"
   },
   "include": ["src"]
 }

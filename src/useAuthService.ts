@@ -165,6 +165,11 @@ export const useAuthService = () => {
       const { code } = Url.parseQueryString();
 
       if (code) {
+        if (!authHandshake) {
+          Url.removeQueryString();
+          return;
+        }
+
         Storage.set("auth-handshake", { isPending: true });
 
         try {
