@@ -1,0 +1,20 @@
+# Node.js
+node_modules/
+
+# TypeScript
+*.tsbuildinfo
+
+# Build artifacts
+dist/
+
+# Editor files
+.vscode/
+
+# macOS files
+.DS_Store
+
+# Dependencies installed via npm
+npm-debug.log*
+
+# Testing
+coverage/
