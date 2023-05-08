@@ -1,10 +1,10 @@
-import { type Dispatch, createContext, useReducer } from "react";
+import React, { type Dispatch, createContext, useReducer } from "react";
 
 export interface WithChildren {
   children?: JSX.Element;
 }
 
-import { type DefaultType, Storage } from "./utils/storage";
+import { type DefaultType, Storage } from "./utils/storage.js";
 
 export interface AuthConfig {
   authorizeEndpoint?: string;

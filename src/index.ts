@@ -1,2 +1,2 @@
-export { AuthProvider } from "./AuthProvider";
-export { useAuthService } from "./useAuthService";
+export { AuthProvider } from "./AuthProvider.js";
+export { useAuthService } from "./useAuthService.js";

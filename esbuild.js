@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { build } = require("esbuild");
+import { build } from "esbuild";
 
 build({
   entryPoints: [
@@ -14,5 +14,6 @@ build({
   outdir: "dist",
   platform: "browser",
   sourcemap: true,
+  minify: true,
   tsconfig: "tsconfig.json",
 }).catch(() => process.exit(1));

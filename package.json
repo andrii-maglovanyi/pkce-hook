@@ -1,9 +1,19 @@
 {
   "name": "pkce-hook",
-  "version": "0.0.1-alpha.3",
+  "version": "0.0.1-alpha.4",
+  "type": "module",
   "description": "Zero dependency authorization Code Flow with PKCE",
+  "engines": {
+    "node": ">=14.16"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "files": [
     "dist/"
   ],
@@ -20,7 +30,11 @@
     "OAuth2",
     "OpenID Connect"
   ],
-  "author": "Andrii Maglovanyi <andrii.maglovanyi@gmail.com>",
+  "author": {
+    "name": "Andrii Maglovanyi",
+    "email": "andrii.maglovanyi@gmail.com",
+    "url": "https://andrii.codes"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/andrii-maglovanyi/pkce-hook.git"

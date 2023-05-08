@@ -1,7 +1,8 @@
+import React from "react";
 import { waitFor, renderHook } from "@testing-library/react";
 
-import { AuthProvider, type WithChildren } from "./AuthProvider";
-import { useAuthService } from "./useAuthService";
+import { AuthProvider, type WithChildren } from "./AuthProvider.js";
+import { useAuthService } from "./useAuthService.js";
 
 const config = {
   clientId: "test-client-id",

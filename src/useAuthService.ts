@@ -1,9 +1,9 @@
 import { useCallback, useContext, useEffect } from "react";
 
-import { type AuthToken, ACTIONS, Store } from "./AuthProvider";
-import { base64URLEncode, createPKCECodes, randomBytes } from "./utils/pkce";
-import { Storage } from "./utils/storage";
-import { Url } from "./utils/url";
+import { type AuthToken, ACTIONS, Store } from "./AuthProvider.js";
+import { base64URLEncode, createPKCECodes, randomBytes } from "./utils/pkce.js";
+import { Storage } from "./utils/storage.js";
+import { Url } from "./utils/url.js";
 
 const codeChallengeMethod = "S256";
 
