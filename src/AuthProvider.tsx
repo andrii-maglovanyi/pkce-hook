@@ -31,6 +31,7 @@ export interface AuthToken extends DefaultType {
 interface AuthState {
   config?: AuthConfig;
   token: AuthToken | null;
+  error?: string;
 }
 
 interface AuthProviderProps extends WithChildren {
@@ -40,11 +41,13 @@ interface AuthProviderProps extends WithChildren {
 export enum ACTIONS {
   setConfig,
   setToken,
+  setError,
 }
 
 type ActionType =
   | { payload: AuthConfig; type: ACTIONS.setConfig }
-  | { payload: AuthToken; type: ACTIONS.setToken };
+  | { payload: AuthToken; type: ACTIONS.setToken }
+  | { payload: string; type: ACTIONS.setError };
 
 const INITIAL_STATE: AuthState = {
   token: Storage.get<AuthToken>("auth"),
@@ -63,6 +66,8 @@ const reducer = (state: AuthState, action: ActionType): AuthState => {
       return { ...state, config: action.payload };
     case ACTIONS.setToken:
       return { ...state, token: action.payload };
+    case ACTIONS.setError:
+      return { ...state, error: action.payload };
     default:
       throw new Error("Invalid action.");
   }

@@ -69,7 +69,8 @@ export const useAuthService = () => {
       const data = await response.json();
 
       if (data.error) {
-        throw new Error(data.error);
+        dispatch({ payload: data.error, type: ACTIONS.setError });
+        console.error(data.error);
       }
 
       return data;
@@ -101,12 +102,11 @@ export const useAuthService = () => {
   );
 
   const login = useCallback(async () => {
-    const authHandshake = Storage.get("auth-handshake");
-    if (authHandshake?.isPending) return;
+    if (isPending() || state.error) return;
 
     const pkce = await createPKCECodes();
-    const state = base64URLEncode(await randomBytes(16));
-    Storage.set("auth-handshake", { ...pkce, state });
+    const authState = base64URLEncode(await randomBytes(16));
+    Storage.set("auth-handshake", { ...pkce, state: authState });
     Storage.remove("auth");
     const codeChallenge = pkce.codeChallenge;
 
@@ -117,7 +117,7 @@ export const useAuthService = () => {
     authorizationUrl.searchParams.append("client_id", clientId);
     authorizationUrl.searchParams.append("scope", scopes.join(" "));
     authorizationUrl.searchParams.append("redirect_uri", redirectUri);
-    authorizationUrl.searchParams.append("state", state);
+    authorizationUrl.searchParams.append("state", authState);
     authorizationUrl.searchParams.append("code_challenge", codeChallenge);
     authorizationUrl.searchParams.append(
       "code_challenge_method",
@@ -157,15 +157,14 @@ export const useAuthService = () => {
 
   useEffect(() => {
     const auth = Storage.get("auth");
-    const authHandshake = Storage.get("auth-handshake");
 
-    if (auth || authHandshake?.isPending) return;
+    if (auth || isPending() || state.error) return;
 
     const getAccessToken = async () => {
-      const { code, state } = Url.parseQueryString();
+      const { code, state: authState } = Url.parseQueryString();
 
       if (code) {
-        if (!authHandshake || authHandshake.state !== state) {
+        if (Storage.get("auth-handshake")?.state !== authState) {
           Storage.remove("auth-handshake");
           Url.removeQueryString();
           return;
@@ -183,7 +182,11 @@ export const useAuthService = () => {
         } catch (error) {
           Storage.remove("auth");
           Storage.remove("auth-handshake");
-          console.error("Failed to fetch access token:", error);
+          Url.removeQueryString();
+
+          const payload = "Failed to fetch access token";
+          dispatch({ payload, type: ACTIONS.setError });
+          console.error(`${payload}:`, error);
         }
       }
     };
@@ -200,7 +203,7 @@ export const useAuthService = () => {
     const { token } = state;
     const { expires_at, refresh_token } = token || {};
 
-    if (refreshTimeout) return;
+    if (refreshTimeout || state.error) return;
     if (!autoRefresh || !expires_at || !refresh_token) return;
 
     const timeoutDuration = expires_at - new Date().getTime();
@@ -230,5 +233,12 @@ export const useAuthService = () => {
     state,
   ]);
 
-  return { authState: state.token, isAuthenticated, isPending, login, logout };
+  return {
+    authState: state.token,
+    authError: state.error,
+    isAuthenticated,
+    isPending,
+    login,
+    logout,
+  };
 };
