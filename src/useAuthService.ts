@@ -5,6 +5,15 @@ import { base64URLEncode, createPKCECodes, randomBytes } from "./utils/pkce.js";
 import { Storage } from "./utils/storage.js";
 import { Url } from "./utils/url.js";
 
+const isAuthenticated = () => {
+  const auth = Storage.get("auth");
+  if (!auth) return false;
+
+  const { access_token, error } = auth;
+
+  return Boolean(access_token) && !error;
+};
+
 const isPending = () => Boolean(Storage.get("auth-handshake")?.isPending);
 
 let refreshTimeout: NodeJS.Timeout | null = null;
@@ -37,14 +46,6 @@ export const useAuthService = () => {
     scopes,
     tokenEndpoint,
   } = config;
-
-  const isAuthenticated = useCallback(() => {
-    if (!state.token) return false;
-
-    const { access_token, error } = state.token;
-
-    return Boolean(access_token) && !error;
-  }, [state.token]);
 
   const fetchToken = useCallback(
     async (params: Record<string, string>) => {
@@ -154,7 +155,9 @@ export const useAuthService = () => {
   );
 
   useEffect(() => {
-    if (state.token || state.error || isPending()) return;
+    const auth = Storage.get("auth");
+
+    if (auth || isPending() || state.error) return;
 
     const getAccessToken = async () => {
       const { code, state: authState } = Url.parseQueryString();
