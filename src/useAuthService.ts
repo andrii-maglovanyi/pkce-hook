@@ -5,17 +5,6 @@ import { base64URLEncode, createPKCECodes, randomBytes } from "./utils/pkce.js";
 import { Storage } from "./utils/storage.js";
 import { Url } from "./utils/url.js";
 
-const codeChallengeMethod = "S256";
-
-const isAuthenticated = () => {
-  const auth = Storage.get("auth");
-  if (!auth) return false;
-
-  const { access_token, error } = auth;
-
-  return Boolean(access_token) && !error;
-};
-
 const isPending = () => Boolean(Storage.get("auth-handshake")?.isPending);
 
 let refreshTimeout: NodeJS.Timeout | null = null;
@@ -48,6 +37,14 @@ export const useAuthService = () => {
     scopes,
     tokenEndpoint,
   } = config;
+
+  const isAuthenticated = useCallback(() => {
+    if (!state.token) return false;
+
+    const { access_token, error } = state.token;
+
+    return Boolean(access_token) && !error;
+  }, [state.token]);
 
   const fetchToken = useCallback(
     async (params: Record<string, string>) => {
@@ -119,29 +116,30 @@ export const useAuthService = () => {
     authorizationUrl.searchParams.append("redirect_uri", redirectUri);
     authorizationUrl.searchParams.append("state", authState);
     authorizationUrl.searchParams.append("code_challenge", codeChallenge);
-    authorizationUrl.searchParams.append(
-      "code_challenge_method",
-      codeChallengeMethod
-    );
+    authorizationUrl.searchParams.append("code_challenge_method", "S256");
 
     window.location.replace(authorizationUrl.toString());
   }, [authorizeEndpoint, clientId, provider, redirectUri, scopes]);
 
-  const logout = (logoutFromProvider = false) => {
-    Storage.remove("auth");
+  const logout = useCallback(
+    (logoutFromProvider = false) => {
+      Storage.remove("auth");
 
-    if (logoutFromProvider) {
-      const logoutUrl = new URL(logoutEndpoint || `${provider}/logout`);
-      logoutUrl.searchParams.append("client_id", clientId);
-      logoutUrl.searchParams.append("post_logout_redirect_uri", redirectUri);
+      if (logoutFromProvider && state.token) {
+        const logoutUrl = new URL(logoutEndpoint || `${provider}/logout`);
+        logoutUrl.searchParams.append("client_id", clientId);
+        logoutUrl.searchParams.append("post_logout_redirect_uri", redirectUri);
+        logoutUrl.searchParams.append("id_token_hint", state.token.id_token);
 
-      window.location.replace(logoutUrl.toString());
-      return true;
-    } else {
-      window.location.reload();
-      return true;
-    }
-  };
+        window.location.replace(logoutUrl.toString());
+        return true;
+      } else {
+        window.location.reload();
+        return true;
+      }
+    },
+    [clientId, logoutEndpoint, provider, redirectUri, state.token]
+  );
 
   const saveAuthToken = useCallback(
     (payload: AuthToken) => {
@@ -156,9 +154,7 @@ export const useAuthService = () => {
   );
 
   useEffect(() => {
-    const auth = Storage.get("auth");
-
-    if (auth || isPending() || state.error) return;
+    if (state.token || state.error || isPending()) return;
 
     const getAccessToken = async () => {
       const { code, state: authState } = Url.parseQueryString();
