@@ -155,6 +155,18 @@ export const useAuthService = () => {
   );
 
   useEffect(() => {
+    if (isAuthenticated()) {
+      if (state.token) return;
+
+      const auth = Storage.get<AuthToken>("auth");
+
+      if (!auth) return;
+
+      saveAuthToken(auth);
+    }
+  }, [state, saveAuthToken]);
+
+  useEffect(() => {
     const auth = Storage.get("auth");
 
     if (auth || isPending() || state.error) return;
