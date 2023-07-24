@@ -1,6 +1,6 @@
 {
   "name": "pkce-hook",
-  "version": "0.0.1-beta.3",
+  "version": "0.0.1-beta.4",
   "type": "module",
   "description": "Zero dependency authorization Code Flow with PKCE",
   "engines": {

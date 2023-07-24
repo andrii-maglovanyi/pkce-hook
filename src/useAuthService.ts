@@ -5,6 +5,10 @@ import { base64URLEncode, createPKCECodes, randomBytes } from "./utils/pkce.js";
 import { Storage } from "./utils/storage.js";
 import { Url } from "./utils/url.js";
 
+export interface AuthServiceParams {
+  strict?: boolean;
+}
+
 const isAuthenticated = () => {
   const auth = Storage.get("auth");
   if (!auth) return false;
@@ -27,13 +31,25 @@ const getCodeVerifier = () => {
   }
 };
 
-export const useAuthService = () => {
+export const useAuthService = ({ strict = true }: AuthServiceParams = {}) => {
   const { dispatch, state } = useContext(Store);
 
   const { config } = state;
 
   if (!config) {
-    throw new Error("AuthProvider not found.");
+    if (strict) {
+      throw new Error("AuthProvider not found.");
+    }
+
+    return {
+      authState: null,
+      authError: null,
+      isAuthenticated: () => false,
+      isPending: () => false,
+      login: () => {},
+      logout: () => {},
+      refreshToken: () => {},
+    };
   }
 
   const {
@@ -154,6 +170,18 @@ export const useAuthService = () => {
     [dispatch]
   );
 
+  const refreshToken = useCallback(async () => {
+    const auth = Storage.get<AuthToken>("auth");
+
+    if (!auth || isPending() || state.error) return;
+
+    const payload = await exchangeRefreshTokenForAccessToken(
+      auth.refresh_token
+    );
+
+    saveAuthToken(payload);
+  }, [exchangeRefreshTokenForAccessToken, saveAuthToken, state.error]);
+
   useEffect(() => {
     if (isAuthenticated()) {
       if (state.token) return;
@@ -251,5 +279,6 @@ export const useAuthService = () => {
     isPending,
     login,
     logout,
+    refreshToken,
   };
 };
