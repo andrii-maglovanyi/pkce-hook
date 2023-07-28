@@ -28,10 +28,11 @@ afterEach(() => {
 });
 
 describe("useAuthService", () => {
-  test("should throw if config is not provided", () => {
-    expect(() => renderHook(() => useAuthService())).toThrow(
-      "AuthProvider not found."
-    );
+  test("should log error if config is not provided", () => {
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    const { current } = renderHook(() => useAuthService()).result;
+    current.login();
+    expect(console.error).toHaveBeenCalledWith("No auth context.");
   });
 
   test("should redirect to auth endpoint", async () => {
