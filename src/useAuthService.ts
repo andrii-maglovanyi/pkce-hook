@@ -5,20 +5,19 @@ import { base64URLEncode, createPKCECodes, randomBytes } from "./utils/pkce.js";
 import { Storage } from "./utils/storage.js";
 import { Url } from "./utils/url.js";
 
-export interface AuthServiceParams {
-  strict?: boolean;
-}
+const isPending = () => Boolean(Storage.get("auth-handshake")?.isPending);
 
 const isAuthenticated = () => {
-  const auth = Storage.get("auth");
+  if (isPending()) return false;
+
+  const auth = Storage.get<AuthToken>("auth");
+
   if (!auth) return false;
 
   const { access_token, error } = auth;
 
   return Boolean(access_token) && !error;
 };
-
-const isPending = () => Boolean(Storage.get("auth-handshake")?.isPending);
 
 let refreshTimeout: NodeJS.Timeout | null = null;
 
@@ -31,40 +30,14 @@ const getCodeVerifier = () => {
   }
 };
 
-export const useAuthService = ({ strict = true }: AuthServiceParams = {}) => {
+export const useAuthService = () => {
   const { dispatch, state } = useContext(Store);
-
-  const { config } = state;
-
-  if (!config) {
-    if (strict) {
-      throw new Error("AuthProvider not found.");
-    }
-
-    return {
-      authState: null,
-      authError: null,
-      isAuthenticated: () => false,
-      isPending: () => false,
-      login: () => {},
-      logout: () => {},
-      refreshToken: () => {},
-    };
-  }
-
-  const {
-    authorizeEndpoint,
-    autoRefresh,
-    clientId,
-    logoutEndpoint,
-    provider,
-    redirectUri,
-    scopes,
-    tokenEndpoint,
-  } = config;
 
   const fetchToken = useCallback(
     async (params: Record<string, string>) => {
+      if (!state.config) return;
+
+      const { provider, tokenEndpoint } = state.config;
       const tokenUrl = new URL(tokenEndpoint || `${provider}/token`);
 
       const requestBody = Object.entries(params).reduce(
@@ -80,43 +53,54 @@ export const useAuthService = ({ strict = true }: AuthServiceParams = {}) => {
         method: "POST",
       });
 
-      const data = await response.json();
-
-      if (data.error) {
-        dispatch({ payload: data.error, type: ACTIONS.setError });
-        console.error(data.error);
-      }
-
-      return data;
+      return response.json();
     },
-    [provider, tokenEndpoint]
+    [state.config]
   );
 
   const exchangeAuthorizationCodeForAccessToken = useCallback(
-    async (authorizationCode: string) =>
-      fetchToken({
+    async (authorizationCode: string) => {
+      if (!state.config) return;
+      const { clientId, redirectUri } = state.config;
+
+      return fetchToken({
         client_id: clientId,
         code: authorizationCode,
         code_verifier: getCodeVerifier(),
         grant_type: "authorization_code",
         redirect_uri: redirectUri,
-      }),
-    [clientId, fetchToken, redirectUri]
+      });
+    },
+    [fetchToken, state.config]
   );
 
   const exchangeRefreshTokenForAccessToken = useCallback(
-    async (refreshToken: string) =>
-      fetchToken({
+    async (refreshToken: string): Promise<AuthToken | undefined> => {
+      if (!state.config) return;
+
+      const { clientId, redirectUri } = state.config;
+
+      return fetchToken({
         client_id: clientId,
         grant_type: "refresh_token",
         redirect_uri: redirectUri,
         refresh_token: refreshToken,
-      }),
-    [clientId, fetchToken, redirectUri]
+      });
+    },
+    [fetchToken, state.config]
   );
 
   const login = useCallback(async () => {
-    if (isPending() || state.error) return;
+    const auth = Storage.get<AuthToken>("auth");
+    if (isPending() || auth?.error) return;
+
+    if (!state.config) {
+      console.error("No auth context.");
+      return;
+    }
+
+    const { authorizeEndpoint, provider, clientId, scopes, redirectUri } =
+      state.config;
 
     const pkce = await createPKCECodes();
     const authState = base64URLEncode(await randomBytes(16));
@@ -136,33 +120,46 @@ export const useAuthService = ({ strict = true }: AuthServiceParams = {}) => {
     authorizationUrl.searchParams.append("code_challenge_method", "S256");
 
     window.location.replace(authorizationUrl.toString());
-  }, [authorizeEndpoint, clientId, provider, redirectUri, scopes]);
+  }, [state.config]);
 
   const logout = useCallback(
     (logoutFromProvider = false) => {
+      const auth = Storage.get<AuthToken>("auth");
+      if (!auth) return;
+
+      if (!state.config) {
+        console.error("No auth context.");
+        return;
+      }
+
+      const { clientId, logoutEndpoint, provider, redirectUri } = state.config;
+
       Storage.remove("auth");
 
-      if (logoutFromProvider && state.token) {
+      if (logoutFromProvider) {
         const logoutUrl = new URL(logoutEndpoint || `${provider}/logout`);
         logoutUrl.searchParams.append("client_id", clientId);
         logoutUrl.searchParams.append("post_logout_redirect_uri", redirectUri);
-        logoutUrl.searchParams.append("id_token_hint", state.token.id_token);
+        logoutUrl.searchParams.append("id_token_hint", auth.id_token);
 
         window.location.replace(logoutUrl.toString());
-        return true;
       } else {
         window.location.reload();
-        return true;
       }
     },
-    [clientId, logoutEndpoint, provider, redirectUri, state.token]
+    [state.config]
   );
 
   const saveAuthToken = useCallback(
     (payload: AuthToken) => {
-      const refreshSlack = 5;
-      const now = new Date().getTime();
-      payload.expires_at = now + (+payload.expires_in + refreshSlack) * 1000;
+      if (payload.error) {
+        console.error(payload.error);
+        dispatch({ payload: payload.error, type: ACTIONS.setError });
+      } else {
+        const refreshSlack = 5;
+        const now = new Date().getTime();
+        payload.expires_at = now + (+payload.expires_in + refreshSlack) * 1000;
+      }
 
       Storage.set("auth", payload);
       dispatch({ payload, type: ACTIONS.setToken });
@@ -170,17 +167,49 @@ export const useAuthService = ({ strict = true }: AuthServiceParams = {}) => {
     [dispatch]
   );
 
-  const refreshToken = useCallback(async () => {
+  const getAccessToken = useCallback(async () => {
+    if (isPending()) return;
+
     const auth = Storage.get<AuthToken>("auth");
 
-    if (!auth || isPending() || state.error) return;
+    if (!auth || auth.error) return;
 
-    const payload = await exchangeRefreshTokenForAccessToken(
-      auth.refresh_token
-    );
+    const { expires_at, refresh_token, access_token } = auth;
+    if (!expires_at || !access_token) return;
+    if (expires_at - new Date().getTime() > 0) return auth;
 
-    saveAuthToken(payload);
-  }, [exchangeRefreshTokenForAccessToken, saveAuthToken, state.error]);
+    if (!refresh_token || !state.config) return;
+
+    const payload = await exchangeRefreshTokenForAccessToken(refresh_token);
+
+    if (payload) {
+      saveAuthToken(payload);
+    }
+
+    return payload;
+  }, [exchangeRefreshTokenForAccessToken, saveAuthToken]);
+
+  const renewAccessToken = useCallback(async () => {
+    const auth = Storage.get<AuthToken>("auth");
+
+    if (!auth || isPending() || auth.error) return;
+
+    const { refresh_token } = auth;
+
+    if (!refresh_token || !state.config) return;
+
+    Storage.set("auth-handshake", { isPending: true });
+
+    const payload = await exchangeRefreshTokenForAccessToken(refresh_token);
+
+    Storage.remove("auth-handshake");
+
+    if (payload) {
+      saveAuthToken(payload);
+    }
+
+    return payload;
+  }, [exchangeRefreshTokenForAccessToken, saveAuthToken]);
 
   useEffect(() => {
     if (isAuthenticated()) {
@@ -195,11 +224,13 @@ export const useAuthService = ({ strict = true }: AuthServiceParams = {}) => {
   }, [state, saveAuthToken]);
 
   useEffect(() => {
-    const auth = Storage.get("auth");
+    if (!state.config) return;
 
-    if (auth || isPending() || state.error) return;
+    const auth = Storage.get<AuthToken>("auth");
 
-    const getAccessToken = async () => {
+    if (auth || isPending()) return;
+
+    const fetchAccessToken = async () => {
       const { code, state: authState } = Url.parseQueryString();
 
       if (code) {
@@ -214,9 +245,10 @@ export const useAuthService = ({ strict = true }: AuthServiceParams = {}) => {
         try {
           const payload = await exchangeAuthorizationCodeForAccessToken(code);
 
+          Storage.remove("auth-handshake");
+
           saveAuthToken(payload);
 
-          Storage.remove("auth-handshake");
           Url.removeQueryString();
         } catch (error) {
           Storage.remove("auth");
@@ -230,17 +262,16 @@ export const useAuthService = ({ strict = true }: AuthServiceParams = {}) => {
       }
     };
 
-    getAccessToken();
-  }, [
-    autoRefresh,
-    dispatch,
-    exchangeAuthorizationCodeForAccessToken,
-    saveAuthToken,
-  ]);
+    fetchAccessToken();
+  }, [dispatch, exchangeAuthorizationCodeForAccessToken, saveAuthToken]);
 
   useEffect(() => {
+    if (!state.config) return;
+
     const { token } = state;
     const { expires_at, refresh_token } = token || {};
+
+    const { autoRefresh } = state.config || {};
 
     if (refreshTimeout || state.error) return;
     if (!autoRefresh || !expires_at || !refresh_token) return;
@@ -255,7 +286,9 @@ export const useAuthService = ({ strict = true }: AuthServiceParams = {}) => {
     refreshTimeout = setTimeout(async () => {
       const payload = await exchangeRefreshTokenForAccessToken(refresh_token);
 
-      saveAuthToken(payload);
+      if (payload) {
+        saveAuthToken(payload);
+      }
     }, timeoutDuration);
 
     return () => {
@@ -264,21 +297,16 @@ export const useAuthService = ({ strict = true }: AuthServiceParams = {}) => {
         refreshTimeout = null;
       }
     };
-  }, [
-    autoRefresh,
-    dispatch,
-    exchangeRefreshTokenForAccessToken,
-    saveAuthToken,
-    state,
-  ]);
+  }, [dispatch, exchangeRefreshTokenForAccessToken, saveAuthToken, state]);
 
   return {
     authState: state.token,
     authError: state.error,
+    getAccessToken,
     isAuthenticated,
     isPending,
     login,
     logout,
-    refreshToken,
+    renewAccessToken,
   };
 };
