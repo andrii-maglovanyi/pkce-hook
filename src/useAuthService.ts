@@ -5,6 +5,8 @@ import { base64URLEncode, createPKCECodes, randomBytes } from "./utils/pkce.js";
 import { Storage } from "./utils/storage.js";
 import { Url } from "./utils/url.js";
 
+const REFRESH_SLACK = 5;
+
 const isPending = () => Boolean(Storage.get("auth-handshake")?.isPending);
 
 const isAuthenticated = () => {
@@ -91,8 +93,8 @@ export const useAuthService = () => {
   );
 
   const login = useCallback(async () => {
-    const auth = Storage.get<AuthToken>("auth");
-    if (isPending() || auth?.error) return;
+    if (isPending()) return;
+    Storage.remove("auth");
 
     if (!state.config) {
       console.error("No auth context.");
@@ -151,14 +153,15 @@ export const useAuthService = () => {
   );
 
   const saveAuthToken = useCallback(
-    (payload: AuthToken) => {
+    (payload?: AuthToken) => {
+      if (!payload) return;
+
       if (payload.error) {
         console.error(payload.error);
         dispatch({ payload: payload.error, type: ACTIONS.setError });
       } else {
-        const refreshSlack = 5;
         const now = new Date().getTime();
-        payload.expires_at = now + (+payload.expires_in + refreshSlack) * 1000;
+        payload.expires_at = now + (+payload.expires_in + REFRESH_SLACK) * 1000;
       }
 
       Storage.set("auth", payload);
@@ -182,9 +185,7 @@ export const useAuthService = () => {
 
     const payload = await exchangeRefreshTokenForAccessToken(refresh_token);
 
-    if (payload) {
-      saveAuthToken(payload);
-    }
+    saveAuthToken(payload);
 
     return payload;
   }, [exchangeRefreshTokenForAccessToken, saveAuthToken]);
@@ -204,24 +205,10 @@ export const useAuthService = () => {
 
     Storage.remove("auth-handshake");
 
-    if (payload) {
-      saveAuthToken(payload);
-    }
+    saveAuthToken(payload);
 
     return payload;
   }, [exchangeRefreshTokenForAccessToken, saveAuthToken]);
-
-  useEffect(() => {
-    if (isAuthenticated()) {
-      if (state.token) return;
-
-      const auth = Storage.get<AuthToken>("auth");
-
-      if (!auth) return;
-
-      saveAuthToken(auth);
-    }
-  }, [state, saveAuthToken]);
 
   useEffect(() => {
     if (!state.config) return;
@@ -286,9 +273,12 @@ export const useAuthService = () => {
     refreshTimeout = setTimeout(async () => {
       const payload = await exchangeRefreshTokenForAccessToken(refresh_token);
 
-      if (payload) {
-        saveAuthToken(payload);
+      if (payload?.error) {
+        Storage.remove("auth");
+        login();
       }
+
+      saveAuthToken(payload);
     }, timeoutDuration);
 
     return () => {

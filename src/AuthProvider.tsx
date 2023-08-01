@@ -49,8 +49,11 @@ type ActionType =
   | { payload: AuthToken; type: ACTIONS.setToken }
   | { payload: string; type: ACTIONS.setError };
 
+const authToken = Storage.get<AuthToken>("auth");
+
 const INITIAL_STATE: AuthState = {
-  token: Storage.get<AuthToken>("auth"),
+  token: authToken,
+  error: authToken?.error,
 };
 
 const context: { dispatch: Dispatch<ActionType>; state: AuthState } = {
