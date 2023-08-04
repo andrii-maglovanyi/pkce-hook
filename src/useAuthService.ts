@@ -8,6 +8,8 @@ import { Url } from "./utils/url.js";
 const REFRESH_SLACK = 5;
 
 const isPending = () => Boolean(Storage.get("auth-handshake")?.isPending);
+const setIsPending = (isPending: boolean) =>
+  Storage.set("auth-handshake", { isPending });
 
 const isAuthenticated = () => {
   if (isPending()) return false;
@@ -37,7 +39,9 @@ export const useAuthService = () => {
 
   const fetchToken = useCallback(
     async (params: Record<string, string>) => {
-      if (!state.config) return;
+      if (!state.config || isPending()) return;
+
+      setIsPending(true);
 
       const { provider, tokenEndpoint } = state.config;
       const tokenUrl = new URL(tokenEndpoint || `${provider}/token`);
@@ -55,7 +59,11 @@ export const useAuthService = () => {
         method: "POST",
       });
 
-      return response.json();
+      const data = await response.json();
+
+      setIsPending(false);
+
+      return data;
     },
     [state.config]
   );
@@ -165,6 +173,7 @@ export const useAuthService = () => {
       }
 
       Storage.set("auth", payload);
+      Storage.remove("auth-handshake");
       dispatch({ payload, type: ACTIONS.setToken });
     },
     [dispatch]
@@ -199,11 +208,7 @@ export const useAuthService = () => {
 
     if (!refresh_token || !state.config) return;
 
-    Storage.set("auth-handshake", { isPending: true });
-
     const payload = await exchangeRefreshTokenForAccessToken(refresh_token);
-
-    Storage.remove("auth-handshake");
 
     saveAuthToken(payload);
 
@@ -227,12 +232,8 @@ export const useAuthService = () => {
           return;
         }
 
-        Storage.set("auth-handshake", { isPending: true });
-
         try {
           const payload = await exchangeAuthorizationCodeForAccessToken(code);
-
-          Storage.remove("auth-handshake");
 
           saveAuthToken(payload);
 
