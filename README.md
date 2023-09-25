@@ -46,6 +46,7 @@ export default function WrappedApp() {
     clientId: "YOUR_CLIENT_ID",
     redirectUri: "YOUR_REDIRECT_URI",
     scopes: ["openid", "profile", "email"],
+    namespace: "APP_NAME",
   };
 
   return (
@@ -75,6 +76,10 @@ As well as optional properties:
 - `tokenEndpoint`
 - `logoutEndpoint`
 - `autoRefresh`
+- `namespace`
+
+**namespace** config is useful in case of multiple micro-frontend apps are using
+different authorization mechanisms and have conflicting keys in local storage.
 
 ### useAuthService
 
