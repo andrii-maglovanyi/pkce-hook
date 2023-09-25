@@ -6,36 +6,44 @@ import { Storage } from "./utils/storage.js";
 import { Url } from "./utils/url.js";
 
 const REFRESH_SLACK = 5;
-
-const isPending = () => Boolean(Storage.get("auth-handshake")?.isPending);
-const setIsPending = (isPending: boolean) =>
-  Storage.set("auth-handshake", { isPending });
-
-const isAuthenticated = () => {
-  if (isPending()) return false;
-
-  const auth = Storage.get<AuthToken>("auth");
-
-  if (!auth) return false;
-
-  const { access_token, error } = auth;
-
-  return Boolean(access_token) && !error;
-};
-
 let refreshTimeout: NodeJS.Timeout | null = null;
-
-const getCodeVerifier = () => {
-  const authHandshake = Storage.get("auth-handshake");
-  if (typeof authHandshake?.codeVerifier !== "string") {
-    throw new Error("Code verifier not found");
-  } else {
-    return authHandshake.codeVerifier;
-  }
-};
 
 export const useAuthService = () => {
   const { dispatch, state } = useContext(Store);
+
+  const authKey = `${state.config?.namespace ?? ""}auth`;
+  const authHandshakeKey = `${state.config?.namespace ?? ""}auth-handshake`;
+
+  const isPending = useCallback(
+    () => Boolean(Storage.get(authHandshakeKey)?.isPending),
+    []
+  );
+
+  const setIsPending = useCallback(
+    (isPending: boolean) => Storage.set(authHandshakeKey, { isPending }),
+    []
+  );
+
+  const isAuthenticated = useCallback(() => {
+    if (isPending()) return false;
+
+    const auth = Storage.get<AuthToken>(authKey);
+
+    if (!auth) return false;
+
+    const { access_token, error } = auth;
+
+    return Boolean(access_token) && !error;
+  }, []);
+
+  const getCodeVerifier = useCallback(() => {
+    const authHandshake = Storage.get(authHandshakeKey);
+    if (typeof authHandshake?.codeVerifier !== "string") {
+      throw new Error("Code verifier not found");
+    } else {
+      return authHandshake.codeVerifier;
+    }
+  }, []);
 
   const fetchToken = useCallback(
     async (params: Record<string, string>) => {
@@ -102,7 +110,8 @@ export const useAuthService = () => {
 
   const login = useCallback(async () => {
     if (isPending()) return;
-    Storage.remove("auth");
+
+    Storage.remove(authKey);
 
     if (!state.config) {
       console.error("No auth context.");
@@ -114,8 +123,8 @@ export const useAuthService = () => {
 
     const pkce = await createPKCECodes();
     const authState = base64URLEncode(await randomBytes(16));
-    Storage.set("auth-handshake", { ...pkce, state: authState });
-    Storage.remove("auth");
+    Storage.set(authHandshakeKey, { ...pkce, state: authState });
+    Storage.remove(authKey);
     const codeChallenge = pkce.codeChallenge;
 
     const authorizationUrl = new URL(
@@ -134,7 +143,7 @@ export const useAuthService = () => {
 
   const logout = useCallback(
     (logoutFromProvider = false) => {
-      const auth = Storage.get<AuthToken>("auth");
+      const auth = Storage.get<AuthToken>(authKey);
       if (!auth) return;
 
       if (!state.config) {
@@ -144,7 +153,7 @@ export const useAuthService = () => {
 
       const { clientId, logoutEndpoint, provider, redirectUri } = state.config;
 
-      Storage.remove("auth");
+      Storage.remove(authKey);
 
       if (logoutFromProvider) {
         const logoutUrl = new URL(logoutEndpoint || `${provider}/logout`);
@@ -172,8 +181,8 @@ export const useAuthService = () => {
         payload.expires_at = now + (+payload.expires_in + REFRESH_SLACK) * 1000;
       }
 
-      Storage.set("auth", payload);
-      Storage.remove("auth-handshake");
+      Storage.set(authKey, payload);
+      Storage.remove(authHandshakeKey);
       dispatch({ payload, type: ACTIONS.setToken });
     },
     [dispatch]
@@ -182,7 +191,7 @@ export const useAuthService = () => {
   const getAccessToken = useCallback(async () => {
     if (isPending()) return;
 
-    const auth = Storage.get<AuthToken>("auth");
+    const auth = Storage.get<AuthToken>(authKey);
 
     if (!auth || auth.error) return;
 
@@ -200,7 +209,7 @@ export const useAuthService = () => {
   }, [exchangeRefreshTokenForAccessToken, saveAuthToken]);
 
   const renewAccessToken = useCallback(async () => {
-    const auth = Storage.get<AuthToken>("auth");
+    const auth = Storage.get<AuthToken>(authKey);
 
     if (!auth || isPending() || auth.error) return;
 
@@ -218,7 +227,7 @@ export const useAuthService = () => {
   useEffect(() => {
     if (!state.config) return;
 
-    const auth = Storage.get<AuthToken>("auth");
+    const auth = Storage.get<AuthToken>(authKey);
 
     if (auth || isPending()) return;
 
@@ -226,8 +235,8 @@ export const useAuthService = () => {
       const { code, state: authState } = Url.parseQueryString();
 
       if (code) {
-        if (Storage.get("auth-handshake")?.state !== authState) {
-          Storage.remove("auth-handshake");
+        if (Storage.get(authHandshakeKey)?.state !== authState) {
+          Storage.remove(authHandshakeKey);
           Url.removeQueryString();
           return;
         }
@@ -239,8 +248,8 @@ export const useAuthService = () => {
 
           Url.removeQueryString();
         } catch (error) {
-          Storage.remove("auth");
-          Storage.remove("auth-handshake");
+          Storage.remove(authKey);
+          Storage.remove(authHandshakeKey);
           Url.removeQueryString();
 
           const payload = "Failed to fetch access token";
@@ -267,7 +276,7 @@ export const useAuthService = () => {
     const timeoutDuration = expires_at - new Date().getTime();
 
     if (timeoutDuration <= 0) {
-      Storage.remove("auth");
+      Storage.remove(authKey);
       return;
     }
 
@@ -275,7 +284,7 @@ export const useAuthService = () => {
       const payload = await exchangeRefreshTokenForAccessToken(refresh_token);
 
       if (payload?.error) {
-        Storage.remove("auth");
+        Storage.remove(authKey);
         login();
       }
 

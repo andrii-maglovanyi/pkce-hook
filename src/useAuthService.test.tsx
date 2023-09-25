@@ -101,4 +101,64 @@ describe("useAuthService", () => {
 
     expect(localStorage.getItem("auth")).toEqual(JSON.stringify(mockResponse));
   });
+
+  describe("should use namespace if provided", () => {
+    const wrapper = {
+      wrapper: ({ children }: WithChildren) => (
+        <AuthProvider config={{ ...config, namespace: "my" }}>
+          {children}
+        </AuthProvider>
+      ),
+    };
+
+    test("should redirect to auth endpoint", async () => {
+      const { result } = renderHook(() => useAuthService(), wrapper);
+
+      expect(localStorage.getItem("my.auth-handshake")).toBe(null);
+
+      result.current.login();
+
+      await waitFor(() => {
+        expect(localStorage.getItem("my.auth-handshake")).toContain(
+          "codeChallenge"
+        );
+      });
+    });
+
+    test("should exchange code for token", async () => {
+      const mockResponse = {
+        access_token: "test-access-token",
+        expires_in: "30",
+        scope: "openid email offline_access",
+        token_type: "bearer",
+      };
+
+      jest.spyOn(window, "fetch").mockResolvedValue({
+        json: jest.fn().mockResolvedValue(mockResponse),
+        status: 200,
+      } as any);
+
+      localStorage.setItem(
+        "my.auth-handshake",
+        JSON.stringify({
+          codeChallenge: "test-challenge",
+          codeVerifier: "test-verifier",
+          createdAt: new Date(),
+          state: "test-state",
+        })
+      );
+
+      window.location.href = `https://local.com?code=test.code&scope=openid+email+offline_access&state=test-state`;
+
+      expect(localStorage.getItem("my.auth")).toBe(null);
+
+      renderHook(() => useAuthService(), wrapper);
+
+      await waitFor(() => {
+        expect(localStorage.getItem("my.auth")).toEqual(
+          JSON.stringify(mockResponse)
+        );
+      });
+    });
+  });
 });

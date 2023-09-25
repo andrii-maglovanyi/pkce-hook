@@ -15,6 +15,7 @@ export interface AuthConfig {
   redirectUri: string;
   scopes: string[];
   tokenEndpoint?: string;
+  namespace?: string;
 }
 
 export interface AuthToken extends DefaultType {
@@ -49,12 +50,7 @@ type ActionType =
   | { payload: AuthToken; type: ACTIONS.setToken }
   | { payload: string; type: ACTIONS.setError };
 
-const authToken = Storage.get<AuthToken>("auth");
-
-const INITIAL_STATE: AuthState = {
-  token: authToken,
-  error: authToken?.error,
-};
+const INITIAL_STATE: AuthState = { token: null };
 
 const context: { dispatch: Dispatch<ActionType>; state: AuthState } = {
   dispatch: () => {},
@@ -77,7 +73,16 @@ const reducer = (state: AuthState, action: ActionType): AuthState => {
 };
 
 export const AuthProvider = ({ children, config }: AuthProviderProps) => {
-  const [state, dispatch] = useReducer(reducer, { ...INITIAL_STATE, config });
+  const authToken = Storage.get<AuthToken>(`${config?.namespace ?? ""}auth`);
+
+  const [state, dispatch] = useReducer(reducer, {
+    token: authToken,
+    error: authToken?.error,
+    config: {
+      ...config,
+      namespace: config.namespace ? `${config.namespace}.` : "",
+    },
+  });
 
   return (
     <Store.Provider value={{ dispatch, state }}>{children}</Store.Provider>
