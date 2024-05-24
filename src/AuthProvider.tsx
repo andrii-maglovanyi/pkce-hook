@@ -1,7 +1,7 @@
-import React, { type Dispatch, createContext, useReducer } from "react";
+import React, { type Dispatch, createContext, useReducer, ReactNode } from "react";
 
 export interface WithChildren {
-  children?: JSX.Element;
+  children?: JSX.Element | ReactNode;
 }
 
 import { type DefaultType, Storage } from "./utils/storage.js";
