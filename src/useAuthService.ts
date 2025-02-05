@@ -7,6 +7,7 @@ import { Url } from "./utils/url.js";
 
 const REFRESH_SLACK = 5;
 let refreshTimeout: NodeJS.Timeout | null = null;
+let pendingResetTimeout: NodeJS.Timeout | null = null;
 
 export const useAuthService = () => {
   const { dispatch, state } = useContext(Store);
@@ -14,22 +15,26 @@ export const useAuthService = () => {
   const authKey = `${state.config?.namespace ?? ""}auth`;
   const authHandshakeKey = `${state.config?.namespace ?? ""}auth-handshake`;
 
-  const isPending = useCallback(
-    () => Boolean(Storage.get(authHandshakeKey)?.isPending),
+  const isPending = useCallback(() => {
+    const pending = Boolean(Storage.get(authHandshakeKey)?.isPending);
+
+    if (pending && !pendingResetTimeout) {
+      pendingResetTimeout = setTimeout(() => {
+        if (Storage.get(authHandshakeKey)?.isPending) {
+          Storage.remove(authHandshakeKey);
+
+          window.location.reload();
+        }
+      }, REFRESH_SLACK * 1000);
+    }
+
+    return pending;
+  }, []);
+
+  const setIsPending = useCallback(
+    (isPending: boolean) => Storage.set(authHandshakeKey, { isPending }),
     []
   );
-
-  const setIsPending = useCallback((isPending: boolean) => {
-    Storage.set(authHandshakeKey, { isPending });
-
-    setTimeout(() => {
-      if (Storage.get(authHandshakeKey)?.isPending) {
-        Storage.set(authHandshakeKey, { isPending: false });
-
-        window.location.reload();
-      }
-    }, REFRESH_SLACK * 1000);
-  }, []);
 
   const isAuthenticated = useCallback(() => {
     if (isPending()) return false;
