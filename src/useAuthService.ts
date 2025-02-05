@@ -21,7 +21,7 @@ export const useAuthService = () => {
     if (pending && !pendingResetTimeout) {
       pendingResetTimeout = setTimeout(() => {
         if (Storage.get(authHandshakeKey)?.isPending) {
-          Storage.remove(authHandshakeKey);
+          removeIsPending();
 
           window.location.reload();
         }
@@ -35,6 +35,12 @@ export const useAuthService = () => {
     (isPending: boolean) => Storage.set(authHandshakeKey, { isPending }),
     []
   );
+
+  const removeIsPending = useCallback(() => {
+    if (Storage.get(authHandshakeKey)?.isPending) {
+      Storage.remove(authHandshakeKey);
+    }
+  }, []);
 
   const isAuthenticated = useCallback(() => {
     if (isPending()) return false;
@@ -81,7 +87,7 @@ export const useAuthService = () => {
 
       const data = await response.json();
 
-      setIsPending(false);
+      removeIsPending();
 
       return data;
     },
