@@ -19,10 +19,17 @@ export const useAuthService = () => {
     []
   );
 
-  const setIsPending = useCallback(
-    (isPending: boolean) => Storage.set(authHandshakeKey, { isPending }),
-    []
-  );
+  const setIsPending = useCallback((isPending: boolean) => {
+    Storage.set(authHandshakeKey, { isPending });
+
+    setTimeout(() => {
+      if (Storage.get(authHandshakeKey)?.isPending) {
+        Storage.set(authHandshakeKey, { isPending: false });
+
+        window.location.reload();
+      }
+    }, REFRESH_SLACK * 1000);
+  }, []);
 
   const isAuthenticated = useCallback(() => {
     if (isPending()) return false;
