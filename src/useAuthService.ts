@@ -25,7 +25,7 @@ export const useAuthService = () => {
 
           window.location.reload();
         }
-      }, REFRESH_SLACK * 1000);
+      }, REFRESH_SLACK * 2 * 1000);
     }
 
     return pending;
